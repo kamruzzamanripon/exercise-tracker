@@ -58,46 +58,43 @@ app.post("/api/users/:_id/exercises", (req, res)=>{
       const newExercise = new Exercise({userId, description, duration, date})
       newExercise.save((err,data)=>{
         //res.json({userId, username, description, data})
-        let dateFormatted = new Date(date).toDateString();
-        res.json({username, description, duration: +duration, _id:userId, date: dateFormatted})
+        res.json({username, description, duration: +duration, _id:userId, date: new Date(date).toDateString()})
       })
     }
   })
   //res.json({"request": req.body})
 })
 
-// app.post("/api/users/:_id/exercises", (req, res)=>{
-//   const {_id:id} = req.params;
-//   const {description, duration, date} =req.body;
-//   People.findById(id, (err, userData)=>{
-//     if(err || !userData){
-//       res.send("Could not find user")
-//     }else{
-//       const newExercise = new Exercise({
-//         userId: id,
-//         description,
-//         duration,
-//         date: new Date(date)
-//       })
-//       newExercise.save((err, data)=>{
-//         if(err || !data){
-//           res.send("There was an error saving this exercise")
-//         }else{
-//           const {description, duration, date, _id} = data;
-//           //return res.send({"data": data})
-//           //let dateFormatted = new Date(date).toDateString();
-//           res.json({
-//             username: userData.username,
-//             description,
-//             duration, 
-//             date: date.toDateString(),
-//             _id: userData.id
-//           })
-//         }
-//       })
-//     }
-//   })
-// })
+app.get("/api/users/:_id/exercises", (req, res)=>{
+  const {_id:id} = req.params;
+  const {description, duration, date} =req.body;
+  People.findById(id, (err, userData)=>{
+    if(err || !userData){
+      res.send("Could not find user")
+    }else{
+      const newExercise = new Exercise({
+        userId: id,
+        description,
+        duration,
+        date: new Date(date)
+      })
+      newExercise.save((err, data)=>{
+        if(err || !data){
+          res.send("There was an error saving this exercise")
+        }else{
+          const {description, duration, date, _id} = data;
+          res.json({
+            username: userData.username,
+            description,
+            duration, 
+            date: date.toDateString(),
+            _id: userData.id
+          })
+        }
+      })
+    }
+  })
+})
 
 
 app.get("/api/users/:_id/logs", (req, res)=>{
@@ -122,7 +119,7 @@ app.get("/api/users/:_id/logs", (req, res)=>{
         filter.date = dateObj;
       }
       let nonNullLimit = limit ?? 500
-      Exercise.find(filter).limit(+nonNullLimit).exec((err, data)=>{
+      Exercise.findOne(filter).limit(+nonNullLimit).exec((err, data)=>{
         if(err || !data){
           res.json([])
         }else{
