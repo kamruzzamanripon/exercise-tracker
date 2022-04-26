@@ -15,8 +15,9 @@ const Exercise = mongoose.model("Exercise", ecerciseSchema)
 app.use(cors())
 app.use(bodyParser.urlencoded({extended: false}))
 app.use(bodyParser.json())
-
 app.use(express.static('public'))
+
+
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
@@ -51,7 +52,7 @@ app.post("/api/users/:_id/exercises", (req, res)=>{
       const newExercise = new Exercise({userId, description, duration, date})
       newExercise.save((err,data)=>{
         //res.json({userId, username, description, data})
-        res.json({username, description, duration: +duration, _id:userId, date: new Date(date).toDateString()})
+        res.json({username, description, duration: +duration, userId, date: new Date(date).toDateString()})
       })
     }
   })
