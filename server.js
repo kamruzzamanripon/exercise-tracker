@@ -1,199 +1,163 @@
 const express = require('express')
+const bodyParser = require('body-parser')
+const mongoose  = require('mongoose')
 const app = express()
 const cors = require('cors')
-const bodyParser = require('body-parser')
 require('dotenv').config()
-const mongoose = require('mongoose')
 
-const {Schema} = mongoose;
-mongoose.connect(process.env.MONGO_URI, {useNewUrlParser:true}, {useUnifiedTopology:true})
-const personSchema = new Schema(
-  {username: {type:String, unique:true}}
-  );
-const People = mongoose.model("People", personSchema);
-const ecerciseSchema = new Schema({
-  userId:{type: String, required:true},
-  description: String,
-  duration: Number,
-  date: Date,
-});
-const Exercise = mongoose.model("Exercise", ecerciseSchema)
+// Basic Configuration
+const port = process.env.PORT || 3000;
+
+//Database Config
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+
+//Database Model 
+const Tracker = require('./models/exerciseData');
 
 app.use(cors())
+
+//Middleware
 app.use(bodyParser.urlencoded({extended: false}))
-app.use(bodyParser.json())
 
 app.use(express.static('public'))
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
 
-app.post("/api/users", (req, res)=>{
-  const newPerson = new People({username: req.body.username});
-  newPerson.save((err, data)=>{
-    if(err){
-      res.json("Username already taken");
-    }else{
-      res.json(data);
+let newUserResponseObject = {}
+
+//New User End Point
+
+app.post('/api/users', function(req, res){
+  const username = req.body['username'];
+  // console.log(username)
+  newUserResponseObject['username'] = username;
+  Tracker.create({username})
+  .then(function(dbtracker){
+    newUserResponseObject['_id'] = dbtracker['_id'];
+    res.json(newUserResponseObject);
+    console.log(dbtracker);
+  })
+  .catch(function(err){
+    console.log(err);
+  })
+
+});
+
+
+//Add Exercises Endpoint
+
+app.post('/api/users/:_id/exercises',function(req, res){
+  const _id = req.params['_id'];
+  var duration = parseInt(req.body['duration']);
+  var description = req.body['description'];
+  var date = req.body['date'];
+  // console.log(date)
+  if(Date.parse(date)){
+    date = new Date(date).toISOString().substring(0,10);
+  }else{
+    date = new Date().toISOString().substring(0,10);
+  }
+  
+  var exerciseObj = {
+    description,
+    duration,
+    date:new Date(date).toDateString()
+  }
+
+ 
+
+  Tracker.findOneAndUpdate({_id:_id},
+  {
+    $push: {
+      log: exerciseObj
+    }
+  },
+  {new: true},
+  (err, updatedUser)=>{
+    let responseObj = {}
+    if(!err && updatedUser != undefined){
+      responseObj['_id'] = updatedUser._id
+      responseObj['username'] = updatedUser.username
+      responseObj['date'] = exerciseObj.date
+      responseObj['description'] = exerciseObj.description
+      responseObj['duration'] = exerciseObj.duration
+    }
+    res.json(responseObj)
+
+  })
+});
+
+
+
+//get /api/users/:_id/logs
+app.get('/api/users/:_id/logs', function(req, res){
+  const _id = req.params['_id'];
+  let responseObject={} ;
+  Tracker.findById(_id, (err, result)=>{
+    if(!err && result != undefined){
+      // console.log('Result: ', result)
+      responseObject['username'] = result.username;
+      responseObject['count'] = result.log.length;
+      responseObject['_id'] = result._id;
+      responseObject['log'] = result.log;
+    }
+
+    if(req.query.from || req.query.to){
+      let fromDate = new Date(0);
+      let toDate = new Date();
+
+      if(req.query.from){
+        if(Date.parse(req.query.from)){
+          fromDate = new Date(req.query.from);
+        }
+      }
+
+      if(req.query.to){
+        if(Date.parse(req.query.to)){
+          toDate = new Date(req.query.to);
+        }
+      }
+
+      fromDate = fromDate.getTime();
+      toDate = toDate.getTime();
+
+      responseObject.log = responseObject.log.filter(entry=>{
+        let entryDate = new Date(entry.date).getTime();
+
+        return entryDate >= fromDate && entryDate <= toDate;
+      })
+      
     }
     
+    if(req.query.limit){
+      responseObject.log = responseObject.log.slice(0,req.query.limit);
+    }
+    
+    // console.log('Response: ', responseObject);
+    res.json(responseObject)
   })
   
-})
+});
 
+//
 
-// app.post("/api/users/:_id/exercises", (req, res)=>{
-//  //return res.json({"data": req.body})
-//   const {_id:userId, description, duration, date} = req.body;
-//   let payload = req.body;
-//   //return res.json({"data": req.body})
-//   if(!date){
-//     date = new Date();
-//   }
+//get /api/users
 
-//   People.findById(userId, (err,data)=>{
-//     if(!data){
-//       res.send("Unknown Id")
-//     }else{
-//       const username = data.username;
-//       const newExercise = new Exercise({userId, description, duration, date})
-//       newExercise.save((err,data)=>{
-//         //res.json({userId, username, description, data})
-//         let dateFormatted = new Date(date).toDateString();
-//         res.json({username, description, duration: +duration, _id:userId, date: dateFormatted})
-//       })
-//     }
-//   })
-//   //res.json({"request": req.body})
-// })
-
-app.post("/api/users/:_id/exercises", (req, res)=>{
-  const {_id:id} = req.params;
-  const {description, duration, date} =req.body;
-  People.findById(id, (err, userData)=>{
-    if(err || !userData){
-      res.send("Could not find user")
-    }else{
-      const newExercise = new Exercise({
-        userId: id,
-        description,
-        duration,
-        date: new Date(date)
-      })
-      newExercise.save((err, data)=>{
-        if(err || !data){
-          res.send("There was an error saving this exercise")
-        }else{
-          const {description, duration, date, _id} = data;
-          //return res.send({"data": data})
-          let dateFormatted = new Date(date).toDateString();
-          res.json({
-            username: userData.username,
-            description,
-            duration, 
-            date: date.toDateString(),
-            _id: userData.id
-          })
-        }
-      })
+app.get('/api/users', function(req,res){
+  Tracker.find({}, function(err, users){
+    if(!err){
+      res.json(users)
     }
   })
-})
-
-
-// app.get("/api/users/:_id/logs", (req, res)=>{
-//   const {_id:id} = req.params;
-//   const {from, to, limit} =req.query;
-//   //res.send( limit)
-//   People.findById(id, (err, userData)=>{
-//     if(err || !userData){
-//       res.send("Unknow user");
-//     }else{
-//       let dateObj = {};
-//       if(from){
-//         dateObj["$gte"] = new Date(from)
-//       }
-//       if(to){
-//         dateObj["$lte"] = new Date(to)
-//       }
-//       let filter = {
-//         userId: id
-//       }
-//       if(from || to){
-//         filter.date = dateObj;
-//       }
-//       let nonNullLimit = limit ?? 500
-//       Exercise.find(filter).limit(+nonNullLimit).exec((err, data)=>{
-//         if(err || !data){
-//           res.json([])
-//         }else{
-//           const count = data.length
-//           const rawLog = data
-//           const {username, _id} = userData;
-//           const log = rawLog.map((l)=>({
-//             description: l.description,
-//             duration: l.duration,
-//             date:  new Date(l.date).toDateString()
-//           }))
-//           res.json({username, count, _id, log})
-//         }
-//       })
-//     }
-//   })
-// })
-
-app.get("/api/users/:_id/logs", (req, res)=>{
-  const {_id:userId} = req.params;
-  const {from, to, limit} =req.query;
-  //res.send( limit)
-  People.findById(userId, (err, data)=>{
-    if(!data){
-      res.send("Unknow userId");
-    }else{
-      const username = data.username;
-      Exercise.find({userId}, {date:{$gte: new Date(from), $lte: new Date(to)}})
-      .select(["id", "description", "duration", "date"]).limit(+limit)
-      .exec((err, data)=>{
-        let customdata = data.map(exer=>{
-          let dateFormatted = new Date(exer.date).toDateString();
-          return {id:exer.id, description: exer.description, duration: exer.duration, date: dateFormatted}
-        })
-
-        if(!data){
-          res.json({
-            "userId": userId,
-            "username": username,
-            "count": 0,
-            "log":[]
-          })
-        }else{
-          res.json({
-            "_id": userId,
-            "username": username,
-            "count": data.length,
-            "log":customdata
-          })
-        }
-      })
-    }
-  })
-})
-
-
-app.get("/api/users", (req, res)=>{
-  People.find({}, (err, data)=>{
-    if(!data){
-      res.send("No users")
-    }else{
-      res.json(data)
-    }
-  })
-})
+});
 
 
 
 
 
-const listener = app.listen(process.env.PORT || 3000, () => {
+
+
+const listener = app.listen(port, () => {
   console.log('Your app is listening on port ' + listener.address().port)
 })
