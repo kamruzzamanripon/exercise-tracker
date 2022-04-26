@@ -7,9 +7,16 @@ const mongoose = require('mongoose')
 
 const {Schema} = mongoose;
 mongoose.connect(process.env.MONGO_URI, {useNewUrlParser:true}, {useUnifiedTopology:true})
-const personSchema = new Schema({username: {type:String, unique:true}});
+const personSchema = new Schema(
+  {username: {type:String, unique:true}}
+  );
 const People = mongoose.model("People", personSchema);
-const ecerciseSchema = new Schema({userId:String, description:String, duration:Number, date:Date});
+const ecerciseSchema = new Schema({
+  userId:{type: String, required:true},
+  description: String,
+  duration: Number,
+  Date: Date
+});
 const Exercise = mongoose.model("Exercise", ecerciseSchema)
 
 app.use(cors())
@@ -27,7 +34,7 @@ app.post("/api/users", (req, res)=>{
     if(err){
       res.json("Username already taken");
     }else{
-      res.json({"username": data.username, "_id": data.id});
+      res.json(data);
     }
     
   })
@@ -58,38 +65,73 @@ app.post("/api/users/:_id/exercises", (req, res)=>{
   //res.json({"request": req.body})
 })
 
+app.get("/api/users/:_id/exercises", (req, res)=>{
+  const {_id:id} = req.params;
+  const {description, duration, date} =req.body;
+  People.findById(id, (err, userData)=>{
+    if(err || !userData){
+      res.send("Could not find user")
+    }else{
+      const newExercise = new Exercise({
+        userId: id,
+        description,
+        duration,
+        date: new Date(date)
+      })
+      newExercise.save((err, data)=>{
+        if(err || !data){
+          res.send("There was an error saving this exercise")
+        }else{
+          const {description, duration, date, _id} = data;
+          res.json({
+            username: userData.username,
+            description,
+            duration, 
+            date: date.toDateString(),
+            _id: userData.id
+          })
+        }
+      })
+    }
+  })
+})
+
 
 app.get("/api/users/:_id/logs", (req, res)=>{
-  const {_id:userId} = req.params;
+  const {_id:id} = req.params;
   const {from, to, limit} =req.query;
   //res.send( limit)
-  People.findById(userId, (err, data)=>{
-    if(!data){
-      res.send("Unknow userId");
+  People.findById(id, (err, userData)=>{
+    if(err || !userData){
+      res.send("Unknow user");
     }else{
-      const username = data.username;
-      Exercise.find({userId}, {date:{$gte: new Date(from), $lte: new Date(to)}})
-      .select(["id", "description", "duration", "date"]).limit(+limit)
-      .exec((err, data)=>{
-        let customdata = data.map(exer=>{
-          let dateFormatted = new Date(exer.date).toDateString();
-          return {id:exer.id, description: exer.description, duration: exer.duration, date: dateFormatted}
-        })
-
-        if(!data){
-          res.json({
-            "userId": userId,
-            "username": username,
-            "count": 0,
-            "log":[]
-          })
+      let dateObj = {};
+      if(from){
+        dateObj["$gte"] = new Date(from)
+      }
+      if(to){
+        dateObj["$lte"] = new Date(to)
+      }
+      let filter = {
+        userId: id
+      }
+      if(from || to){
+        filter.date = dateObj;
+      }
+      let nonNullLimit = limit ?? 500
+      Exercise.findOne(filter).limit(+nonNullLimit).exec((err, data)=>{
+        if(err || !data){
+          res.json([])
         }else{
-          res.json({
-            "userId": userId,
-            "username": username,
-            "count": data.length,
-            "log":customdata
-          })
+          const count = data.length
+          const rawLog = data
+          const {username, _id} = userData;
+          const log = rawLog.map((l)=>({
+            description: l.description,
+            duration: l.duration,
+            date: l.date.toDateString()
+          }))
+          res.json({username, count, _id, log})
         }
       })
     }
