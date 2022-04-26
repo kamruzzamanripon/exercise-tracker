@@ -101,41 +101,78 @@ app.post("/api/users/:_id/exercises", (req, res)=>{
 })
 
 
+// app.get("/api/users/:_id/logs", (req, res)=>{
+//   const {_id:id} = req.params;
+//   const {from, to, limit} =req.query;
+//   //res.send( limit)
+//   People.findById(id, (err, userData)=>{
+//     if(err || !userData){
+//       res.send("Unknow user");
+//     }else{
+//       let dateObj = {};
+//       if(from){
+//         dateObj["$gte"] = new Date(from)
+//       }
+//       if(to){
+//         dateObj["$lte"] = new Date(to)
+//       }
+//       let filter = {
+//         userId: id
+//       }
+//       if(from || to){
+//         filter.date = dateObj;
+//       }
+//       let nonNullLimit = limit ?? 500
+//       Exercise.find(filter).limit(+nonNullLimit).exec((err, data)=>{
+//         if(err || !data){
+//           res.json([])
+//         }else{
+//           const count = data.length
+//           const rawLog = data
+//           const {username, _id} = userData;
+//           const log = rawLog.map((l)=>({
+//             description: l.description,
+//             duration: l.duration,
+//             date:  new Date(l.date).toDateString()
+//           }))
+//           res.json({username, count, _id, log})
+//         }
+//       })
+//     }
+//   })
+// })
+
 app.get("/api/users/:_id/logs", (req, res)=>{
-  const {_id:id} = req.params;
+  const {_id:userId} = req.params;
   const {from, to, limit} =req.query;
   //res.send( limit)
-  People.findById(id, (err, userData)=>{
-    if(err || !userData){
-      res.send("Unknow user");
+  People.findById(userId, (err, data)=>{
+    if(!data){
+      res.send("Unknow userId");
     }else{
-      let dateObj = {};
-      if(from){
-        dateObj["$gte"] = new Date(from)
-      }
-      if(to){
-        dateObj["$lte"] = new Date(to)
-      }
-      let filter = {
-        userId: id
-      }
-      if(from || to){
-        filter.date = dateObj;
-      }
-      let nonNullLimit = limit ?? 500
-      Exercise.find(filter).limit(+nonNullLimit).exec((err, data)=>{
-        if(err || !data){
-          res.json([])
+      const username = data.username;
+      Exercise.find({userId}, {date:{$gte: new Date(from), $lte: new Date(to)}})
+      .select(["id", "description", "duration", "date"]).limit(+limit)
+      .exec((err, data)=>{
+        let customdata = data.map(exer=>{
+          let dateFormatted = new Date(exer.date).toDateString();
+          return {id:exer.id, description: exer.description, duration: exer.duration, date: dateFormatted}
+        })
+
+        if(!data){
+          res.json({
+            "userId": userId,
+            "username": username,
+            "count": 0,
+            "log":[]
+          })
         }else{
-          const count = data.length
-          const rawLog = data
-          const {username, _id} = userData;
-          const log = rawLog.map((l)=>({
-            description: l.description,
-            duration: l.duration,
-            date:  new Date(l.date).toDateString()
-          }))
-          res.json({username, count, _id, log})
+          res.json({
+            "_id": userId,
+            "username": username,
+            "count": data.length,
+            "log":customdata
+          })
         }
       })
     }
