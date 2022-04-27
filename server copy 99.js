@@ -28,6 +28,7 @@ app.get('/', (req, res) => {
 let newUserResponseObject = {}
 
 //New User End Point
+
 app.post('/api/users', function(req, res){
   const username = req.body['username'];
   // console.log(username)
@@ -46,6 +47,7 @@ app.post('/api/users', function(req, res){
 
 
 //Add Exercises Endpoint
+
 app.post('/api/users/:_id/exercises',function(req, res){
   const _id = req.params['_id'];
   var duration = parseInt(req.body['duration']);
